@@ -1,5 +1,12 @@
+library(shiny)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(tidyverse)
+
 # app.R
-source('/mnt/users_shared/Users/Shammi_Luhar/Generalisability/Generalisability_Shiny/Load_libraries.R')
+# source('/mnt/users_shared/Users/Shammi_Luhar/Generalisability/Generalisability_Shiny/Load_libraries.R')
 
 
 # Load data
@@ -118,95 +125,96 @@ ui <- fluidPage(
   # Layout: Sidebar and Main Panel
   sidebarLayout(
     sidebarPanel(
-      #in the side bar we want 2 buttons
-      actionButton("select_all", "Select All Trusts"),        # first command says what needs doing and second is the text
-      actionButton("deselect_all", "Deselect All Trusts"),    # first command says what needs doing and second is the text
-      tags$div(
-        style = "max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-top: 10px;",
-        h4("Arcturis Trusts"),   # h4 is heading
-        checkboxGroupInput(      # Checkoxgroupinput creates a group of checkboxes—allowing the user to select one or more
-          "selected_arcturis",  # unique input id to be used in the 'Server' area
-          NULL,
-          choices = arcturis_trusts,
-          selected = arcturis_trusts  # selected by default
-        ),
-        h4("Remaining Trusts"),
-        checkboxGroupInput(
-          "selected_remaining",
-          NULL,
-          choices = remaining_trusts
+      # Show ENGLISH trust selectors everywhere EXCEPT:
+      # - Population Pyramids > Population Pyramid - Scotland
+      # - Ethnicity > Ethnicity - Scotland
+      conditionalPanel(
+        condition = "!( (input.top_tabs === 'Population Pyramids' && input.pyr_subtabs === 'Population Pyramid - Scotland') || (input.top_tabs === 'Ethnicity' && input.eth_tabs === 'Ethnicity - Scotland') )",
+        actionButton("select_all", "Select All Trusts"),
+        actionButton("deselect_all", "Deselect All Trusts"),
+        tags$div(
+          style = "max-height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-top: 10px;",
+          h4("Arcturis Trusts"),
+          checkboxGroupInput("selected_arcturis", NULL, choices = arcturis_trusts, selected = arcturis_trusts),
+          h4("Remaining Trusts"),
+          checkboxGroupInput("selected_remaining", NULL, choices = remaining_trusts)
         )
       ),
-      checkboxInput("show_background", "Show national comparison", value = TRUE)
-    ),
+      
+      # Show SCOTLAND area selectors for the POPULATION PYRAMID – SCOTLAND subtab
+      conditionalPanel(
+        condition = "input.top_tabs === 'Population Pyramids' && input.pyr_subtabs === 'Population Pyramid - Scotland'",
+        tags$div(style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;",
+                 actionButton("scot_select_all","Select All Areas"),
+                 actionButton("scot_deselect_all","Deselect All Areas"),
+                 actionButton("scot_select_arcturis","Select Arcturis Areas")
+        ),
+        tags$div(
+          style="max-height: 260px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 12px;",
+          checkboxGroupInput("scot_selected_areas", "Select area(s):", choices = scot_areas, selected = arcturis_scot_areas)
+        )
+      ),
+      
+      # Show SCOTLAND area selectors for the ETHNICITY – SCOTLAND subtab
+      conditionalPanel(
+        condition = "input.top_tabs === 'Ethnicity' && input.eth_tabs === 'Ethnicity - Scotland'",
+        tags$div(style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;",
+                 actionButton("eth_scot_select_all", "Select All Areas"),
+                 actionButton("eth_scot_deselect_all", "Deselect All Areas"),
+                 actionButton("eth_scot_select_arcturis", "Select Arcturis Areas")
+        ),
+        tags$div(
+          style="max-height: 260px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 12px;",
+          checkboxGroupInput(
+            "eth_scot_selected_areas", "Select area(s):",
+            choices  = scot_eth_areas,
+            selected = arcturis_scot_areas
+          )
+        )
+      ),
+      
+      # Global toggle (visible on all tabs)
+      checkboxInput("show_background", "Show national comparison", value = TRUE)),
     
     # Panel for outputs (main content area)
     mainPanel(
       tabsetPanel( id = "top_tabs",
                    # ---- TOP-LEVEL TAB 1 ----
                    tabPanel("Population Pyramids",
-                            tabsetPanel( id = "pyr_subtabs",
-                                         tabPanel("Catchment Pyramid",  plotOutput("pyramid_catchment"),
-                                                  br(), strong("Underlying counts (selected trusts)"),
-                                                  tableOutput("pyr_catchment_table")),
-                                         tabPanel("Patients Pyramid",   plotOutput("pyramid_patients"),
-                                                  br(), strong("Underlying counts (selected trusts)"),
-                                                  tableOutput("pyr_patients_table"))
-                            )
-                   ),
+                            tabsetPanel(id = "pyr_subtabs",
+                                        tabPanel("Catchment Pyramid - England",  plotOutput("pyramid_catchment"), br(), strong("Underlying counts (selected trusts)"), tableOutput("pyr_catchment_table")),
+                                        tabPanel("Patients Pyramid - England",   plotOutput("pyramid_patients"),  br(), strong("Underlying counts (selected trusts)"), tableOutput("pyr_patients_table")),
+                                        tabPanel("Population Pyramid - Scotland",
+                                                 plotOutput("pyramid_scotland"),
+                                                 br(), strong("Underlying counts (selected areas)"),
+                                                 tableOutput("pyr_scotland_table")
+                                        )
+                            )),
                    
                    # ---- TOP-LEVEL TAB 2 ----
                    tabPanel("Ethnicity",
                             tabsetPanel(
-                              tabPanel("Ethnicity Breakdown Table", tableOutput("ethnicity_table")),
-                              tabPanel("Ethnicity Bar Chart",       plotOutput("ethnicity_bar")),
+                              id = "eth_tabs",
+                              
+                              # Combined subtab for England
+                              tabPanel("Ethnicity - England",
+                                       h4("Breakdown (counts and %)"),
+                                       tableOutput("ethnicity_table"),
+                                       br(),
+                                       h4("Composition (%)"),
+                                       plotOutput("ethnicity_bar", height = "420px")
+                              ),
+                              
+                              # Scotland subtab (area controls now in sidebar)
                               tabPanel("Ethnicity - Scotland",
-                                       # Buttons row
-                                       fluidRow(
-                                         column(
-                                           12,
-                                           div(
-                                             style = "display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;",
-                                             actionButton("eth_scot_select_all", "Select All Areas"),
-                                             actionButton("eth_scot_deselect_all", "Deselect All Areas"),
-                                             actionButton("eth_scot_select_arcturis", "Select Arcturis Areas")
-                                           )
-                                         )
-                                       ),
-                                       
-                                       # Scrollable area checklist
-                                       tags$div(
-                                         style = "max-height: 260px; overflow-y: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 12px;",
-                                         checkboxGroupInput(
-                                           "eth_scot_selected_areas",
-                                           "Select area(s):",
-                                           choices  = scot_eth_areas,
-                                           selected = scot_eth_areas
-                                         )
-                                       ),
-                                       
                                        h4("Breakdown (counts and %)"),
                                        tableOutput("ethnicity_scotland_table"),
-                                       
+                                       br(),
                                        h4("Composition (%)"),
                                        plotOutput("ethnicity_scotland_bar")
                               )
-                            )
-                   ),
+                            ))
                    
-                   tabPanel("Population Pyramid - Scotland",
-                            fluidRow(
-                              column(12, div(style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px;",
-                                             actionButton("scot_select_all","Select All Areas"),
-                                             actionButton("scot_deselect_all","Deselect All Areas"),
-                                             actionButton("scot_select_arcturis","Select Arcturis Areas")))
-                            ),
-                            tags$div(style="max-height:260px; overflow-y:auto; border:1px solid #ccc; padding:10px; margin-bottom:12px;",
-                                     checkboxGroupInput("scot_selected_areas","Select area(s):",
-                                                        choices = scot_areas, selected = scot_areas)),
-                            plotOutput("pyramid_scotland"),
-                            br(), strong("Underlying counts (selected areas)"),
-                            tableOutput("pyr_scotland_table"))
       )
     )
   )
@@ -233,7 +241,7 @@ server <- function(input, output, session) {
   })
   
   observeEvent(input$scot_select_all, {
-    updateCheckboxGroupInput(session, "scot_selected_areas", selected = scot_areas)
+    updateCheckboxGroupInput(session, "scot_selected_areas", selected = arcturis_scot_areas)
   })
   
   observeEvent(input$scot_deselect_all, {
@@ -341,9 +349,13 @@ server <- function(input, output, session) {
   
   # Aggregate selected Scotland areas
   scot_filtered <- reactive({
-    req(input$scot_selected_areas)
+    # Fallback to all areas if the input doesn't exist yet (because the sidebar
+    # is hidden by conditionalPanel) or nothing is selected.
+    selected <- input$scot_selected_areas
+    if (is.null(selected) || length(selected) == 0) selected <- scot_areas
+    
     scot_data %>%
-      filter(Area %in% input$scot_selected_areas) %>%
+      filter(Area %in% selected) %>%
       group_by(Sex, AgeGroup) %>%
       summarise(Count = sum(Count, na.rm = TRUE), .groups = "drop")
   })
@@ -443,6 +455,56 @@ server <- function(input, output, session) {
       mutate(
         `Male %` = round(100 * Male   / Total, 1),
         `Female %` = round(100 * Female / Total, 1)
+      )
+    
+    bind_rows(out, totals) %>%
+      mutate(
+        Male   = formatC(Male,   format = "f", digits = 0, big.mark = ","),
+        Female = formatC(Female, format = "f", digits = 0, big.mark = ","),
+        Total  = formatC(Total,  format = "f", digits = 0, big.mark = ",")
+      )
+  })
+  
+  # ---- Patients table (England) ----
+  output$pyr_patients_table <- renderTable({
+    df <- filtered_data()  # has Sex, AgeGroup, Patients
+    
+    # Group fine ages into broader bands
+    df <- df %>%
+      mutate(
+        AgeBand = case_when(
+          AgeGroup %in% c("0-4", "5-9", "10-14", "15-19") ~ "0-19",
+          AgeGroup %in% c("20-24", "25-29", "30-34", "35-39") ~ "20-39",
+          AgeGroup %in% c("40-44", "45-49", "50-54", "55-59") ~ "40-59",
+          AgeGroup %in% c("60-64", "65-69", "70-74", "75-79") ~ "60-79",
+          TRUE ~ "80+"
+        )
+      )
+    
+    out <- df %>%
+      group_by(AgeBand) %>%
+      summarise(
+        Male   = sum(ifelse(Sex == "Male",   Patients, 0), na.rm = TRUE),
+        Female = sum(ifelse(Sex == "Female", Patients, 0), na.rm = TRUE),
+        .groups = "drop"
+      ) %>%
+      mutate(
+        Total     = Male + Female,
+        `Male %`  = round(100 * Male   / ifelse(Total == 0, NA_real_, Total), 1),
+        `Female %`= round(100 * Female / ifelse(Total == 0, NA_real_, Total), 1)
+      )
+    
+    # Total row
+    totals <- out %>%
+      summarise(
+        AgeBand = "All ages",
+        Male   = sum(Male, na.rm = TRUE),
+        Female = sum(Female, na.rm = TRUE),
+        Total  = sum(Total, na.rm = TRUE)
+      ) %>%
+      mutate(
+        `Male %`  = round(100 * Male   / Total, 1),
+        `Female %`= round(100 * Female / Total, 1)
       )
     
     bind_rows(out, totals) %>%
@@ -559,11 +621,14 @@ server <- function(input, output, session) {
   
   # --- Reactive: summed counts across selected areas ---
   eth_scot_filtered <- reactive({
-    req(input$eth_scot_selected_areas)
+    selected <- input$eth_scot_selected_areas
+    if (is.null(selected) || length(selected) == 0) selected <- scot_eth_areas
+    
     eth_scot_raw %>%
-      filter(Area %in% input$eth_scot_selected_areas) %>%
+      filter(Area %in% selected) %>%
       summarise(across(c(White, Mixed, Asian, Black, Other), ~ sum(.x, na.rm = TRUE)))
   })
+  
   
   # --- Table: counts + percentages ---
   output$ethnicity_scotland_table <- renderTable({
